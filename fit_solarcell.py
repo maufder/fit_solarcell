@@ -190,14 +190,11 @@ def fit_solar_cell(lightfile=None, darkfile=None, model='1-diode', plot=False, v
             Jvoc_region = Iexp[(Vexp > 0.9 * Voc) & (Vexp <= Voc)]
         else:
             Voc = None
-            Voc_region = np.array([])
-            Jvoc_region = np.array([])
+            Voc_region = Vexp[-2:]
+            Jvoc_region = Iexp[-2:]
         
+        Rs_estimate = np.abs((Voc_region[-1] - Voc_region[0]) / (Jvoc_region[-1] - Jvoc_region[0]))
 
-        if len(Voc_region) >= 2:
-            Rs_estimate = np.abs((Voc_region[-1] - Voc_region[0]) / (Jvoc_region[-1] - Jvoc_region[0]))
-        else:
-            Rs_estimate = 0.01  # fallback
 
         lowV_region = Vexp[(Vexp > 0) & (Vexp < 0.1)]
         lowI_region = Iexp[(Vexp > 0) & (Vexp < 0.1)]
@@ -216,15 +213,15 @@ def fit_solar_cell(lightfile=None, darkfile=None, model='1-diode', plot=False, v
 
     if model == '1-diode':
         bounds = [(0.5 * Isc, 1.5 * Isc),
-                  (np.log10(1e-15), np.log10(1e-6)),
-                  (0.5, 2),
+                  (np.log10(1e-16), np.log10(1e-6)),
+                  (0.5, 4),
                   (0.5 * Rs_estimate, 2.0 * Rs_estimate),
                   (1 / (5 * Rsh_estimate), 5 / Rsh_estimate) if not no_shunt else (1e-12, 1e-12)]
         x0 = [Isc, -14, 1, Rs_estimate, 1/Rsh_estimate]
     elif model == '2-diode':
         bounds = [(0.5 * Isc, 1.5 * Isc),
-                  (np.log10(1e-15), np.log10(1e-6)), (0.5, 2),
-                  (np.log10(1e-15), np.log10(1e-6)), (1.5, 5),
+                  (np.log10(1e-16), np.log10(1e-6)), (0.5, 3),
+                  (np.log10(1e-16), np.log10(1e-5)), (2, 5),
                   (0.5 * Rs_estimate, 2.0 * Rs_estimate),
                   (1 / (5 * Rsh_estimate), 5 / Rsh_estimate) if not no_shunt else (1e-12, 1e-12)]
         x0 = [Isc, -14, 1, -13, 2, Rs_estimate, 1/Rsh_estimate]
@@ -287,12 +284,14 @@ def fit_solar_cell(lightfile=None, darkfile=None, model='1-diode', plot=False, v
     if plot or verbose:
         generate_spice_netlist(raw_params, "final_fit.cir", sweep_points, model=model)
         Vsim, Isim = run_spice("final_fit.cir")
+        os.rename("sim_output.txt", "final_fit.dat")
 
         # Generate dark JV curve (with Iph set to 0)
         dark_params = raw_params.copy()
         dark_params[0] = 0
         generate_spice_netlist(dark_params, "dark_fit.cir", sweep_points, model=model)
         Vdark, Idark = run_spice("dark_fit.cir")
+        os.rename("sim_output.txt", "dark_fit.dat")
 
         # Create side-by-side plots
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
